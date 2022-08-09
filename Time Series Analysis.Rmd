@@ -1,0 +1,219 @@
+---
+title: "Final Project - STA457"
+output: html_document
+---
+
+```{r, echo=FALSE}
+#Loading the necessary libraries
+library(astsa)
+library(tidyr)
+library(forecast)
+library(tseries)
+```
+
+\section{Abstract}
+This report aims to conduct a time series analysis of the data of the Monthly Federal Reserve Board Production Index data from 1948 to 1978. This analysis can help us understand the underlying pattern in the data and aid in predicting future production indexes. The data used is taken from the available package "astsa" in R. For this analysis, SARIMA models were used to predict and perform spectral analysis. As a result, it was found that the production index would continue to increase in the upcoming ten months. The useful keywords for this report are Differencing of Data, ACF and PACF of data, Kwiatkowski-Phillips-Schmidt-Shin (KPSS) test, SARIMA models, ARIMA models, Standardized Residuals, ACF of residuals, Normal QQ plot of standardized residuals, and p-values for Ljung-Box statistic, Spectral Analysis, Dominant Frequencies, Spectrum, and Confidence Intervals. Towards the end of the report, you will find a conclusion, some limitations, and directions for further research.
+
+\section{Introduction}
+
+
+We will be looking at Monthly Federal Reserve Board Production Index data from 1948 to 1978. The Federal Reserve Board of the United States publishes their Production Index monthly. It measures the gross production return on industries that affect a country's economy. These industries are manufacturing, construction, electric and gas utilities, and mining. The primary purpose of the Federal Reserve (The Fed) is to act as the central banking system of the United States. Therefore, The Fed compiles the gross production index monthly to highlight any short-term production changes. The production index reflects the growth or decline of the industry. Consequently, it depends on the increases or decreases of the index as compared to the last month. More can be found about this at \textcolor{blue}{https://www.federalreserve.gov/releases/g17/IpNotes.htm}.\\\\
+Throughout this report, we want to be able to find a model that best interprets the variation of the production index depending on the past trends. The goal is to use statistical methods to understand if the factor that contributes to the economy has trends or patterns and how closely we can predict them. For our purposes, the prediction would be based on the assumption that the future production index depicts similar trends as the past production index does. In conclusion, we want to look at how good the past trends in the production index are in predicting the future production index.
+
+\section{Statistical Methods}
+\subsection{Exploring the data}
+After loading the data, it is plotted against time to observe the variation of the production index with time. We can see this plot in Figure \ref{fig:fig1}. We can essentially see an upward trend with a few non-significant drops. One of the most significant drops can be seen around 1975 which can be because of the end of the Vietnamese War. After this dip, we can see the production index rise again. \\
+
+```{r, echo=FALSE}
+#Plotting the time series
+plot.ts(prodn, main ="Monthly Federal Reserve Board Production Index data from 1948 to 1978", ylab="Production Index", xlab="Time")
+```
+\subsection{Differencing the data}
+This plot does not indicate a constant mean or variance. Further, observing the gradual decay in the data's ACF plot in the Figure \ref{fig:fig2} as the lag h increases proves that the process is currently not stationary and some sort of transformation or differencing is necessary. Figure \ref{fig:fig2} shows the plot for both ACF and PACF.\\
+
+```{r, echo=FALSE}
+#Plotting the ACF and PACF for the time series
+acf2(prodn)
+```
+We proceed by differencing to make our data stationary; the plot below in the Figure \ref{fig:fig3} shows the differenced data, its ACF and PACF. We can see peaks on lags 1s, 2s, and 3s (we define s=12). We also have a gradual decay in ACF. Hence this indicates the need for seasonal difference.
+
+```{r, echo=FALSE}
+#First difference
+diff1 <- diff(prodn)
+plot.ts(diff1, main ="First Difference")
+acf2(diff1)
+```
+Below in Figure \ref{fig:fig4} is the plot of the data that has been differenced with a twelfth-order difference due to the persistence in the months. It goes to show that the trend has been largely removed. The ACF of this differenced data, as seen in Figure \ref{fig:fig4}, decays very quickly to 0. This proves that we will no longer need to transform or difference the data anymore. To confirm if the data is stationary, we perform the KPSS test in R. The Kwiatkowski-Phillips-Schmidt-Shin (KPSS) test has the null hypothesis that the data is stationary. After performing this test on the differenced data, we get the p-value of 0.1. This result gives us no evidence against the null hypothesis. The results of the KPSS test, along with the month plot of the seasonally differenced data, are seen in Figure \ref{fig:fig5}. The month plot further confirms the differenced data is stationary. Therefore, our differenced data is stationary, and we can move to the next step of finding models.\\
+
+```{r, echo=FALSE}
+#Seasonal Difference
+diff12 <- diff(diff1, 12)
+plot.ts(diff12, main ="Seasonal Difference")
+acf2(diff12)
+monthplot(diff12)
+```
+By looking at the plots, we can infer that the series looks stationary. To 
+further confirm this, we will perform the kpss test.
+
+```{r}
+#Testing to check if data is stationary
+kpss.test(diff12)
+```
+
+Since the p-value = 0.1, this means that we do not have evidence against the null
+hypothesis, which is that, the trend is stationary. Hence, we do not have to
+perform any more differences on the our data.
+
+Looking at the ACF plot, we can say that:
+```{r}
+#Plotting the ACF again
+acf2(diff12)
+```
+\subsection{Proposing SARIMA models}
+We choose to use a SARIMA model since our data has a seasonal aspect to it. Since we differenced our data only once, we propose D=d=2 in our SARIMA model. To find the other dependence orders, we want to look at the Seasonal and Non-Seasonal Components.
+Let s =12, 
+- The ACF cutting at lag 1s as the PACF tails off at lag 1s. This suggests MA(1).
+- The ACF cuts as lag 3s, with PACF tailing off. This suggests MA(3).
+- PACF cutting at lag 2s, whereas ACF tails off. So we have AR(2)
+- Both ACF and PACF tailing off, with P=2 and Q=1.
+
+Next, looking at within seasonal lags, we see that 
+- PACF cuts off at lag 2
+- ACF and PACF are tailing off after lag 1
+
+The proposed models are as follows:
+$ARIMA(2, 1, 1) \times (0, 1, 3)_{12}$
+$ARIMA(2, 1, 0) \times (0, 1, 1)_{12}$
+$ARIMA(2, 1, 0) \times (0, 1, 3)_{12}$
+$ARIMA(2, 1, 1) \times (2, 1, 1)_{12}$
+$ARIMA(2, 1, 0) \times (2, 1, 1)_{12}$
+
+
+```{r}
+#The five models that were proposed
+model1 <- sarima(prodn, 2, 1, 1, 0, 1, 3, 12)
+model2 <- sarima(prodn, 2, 1, 0, 0, 1, 1, 12)
+model3 <- sarima(prodn, 2, 1, 0, 0, 1, 3, 12)
+model4 <- sarima(prodn, 2, 1, 1, 2, 1, 1, 12)
+model5 <- sarima(prodn, 2, 1, 0, 2, 1, 1, 12)
+```
+
+\section{Results}
+\subsection{Model Diagnostics}
+The models' parameter estimates are given below in Table \ref{table:1}.Looking at the first model $ARIMA(2, 1, 1) \times (0, 1, 3)_{12}$, we can see that the parameters are not significant. Hence we can try to drop one parameter. So, $ARIMA(2, 1, 0) \times (0, 1, 3)_{12}$ is proposed. This model is significant so that we can continue with this model. Next, if we look at $ARIMA(2, 1, 0) \times (0, 1, 1)_{12}$, we see that the model parameters are again insignificant; hence we drop it. Finally, we get to observe the two last model proposed which are $ARIMA(2, 1, 1) \times (2, 1, 1)_{12}$ and $ARIMA(2, 1, 0) \times (2, 1, 1)_{12}$. The parameters of these models are significant, so we can continue to consider these models. Now we move toward model diagnostics. We have three finalised models $ARIMA(2, 1, 0) \times (0, 1, 3)_{12}$, $ARIMA(2, 1, 1) \times (2, 1, 1)_{12}$ and $ARIMA(2, 1, 0) \times (2, 1, 1)_{12}$.
+
+```{r}
+#Finding the estimates of the proposed models
+model1$ttable
+model2$ttable
+model3$ttable
+model4$ttable
+model5$ttable
+```
+
+```{r}
+#Creating a table that shows the parameter estimates
+df_table <- tibble(model= c('SARIMA(2, 1, 1, 0, 1, 3, 12)', 
+                          'SARIMA(2, 1, 0, 0, 1, 1, 12)', 
+                          'SARIMA(2, 1, 0, 0, 1, 3, 12)', 
+                          'SARIMA(2, 1, 1, 2, 1, 1, 12)', 
+                          'SARIMA(2, 1, 0, 2, 1, 1, 12)'),
+                 estimates= c('ar1: -0.2818, ar2: 0.3039, ma1:0.5976', 
+                              'ar1: 0.2970, ar2: 0.1001', 
+                              'ar1: 0.3038, ar2: 0.1077',
+                              'ar1: -0.3005, ar2: 0.3058, ma1: 0.6126',
+                              'ar1: 0.2992, ar2: 0.1086') )
+df_table
+```
+Looking at $ARIMA(2, 1, 0) \times (0, 1, 3)_{12}$, the standardized residuals, ACF of residuals, Normal QQ plot of standardized residuals, and p-values for Ljung-Box statistic are shown in the Figure \ref{fig:fig6}. If we look at the standardized residuals, we do not see any trend in particular. So we can say that it seems like white noise, which works in our favour. Next, looking at the ACF of residuals, we do not see any particular significance either. As for the QQ plot, the residual points seem to follow the normal distribution since they align very well with the straight line. Finally, as for the p-values for the Ljung-Box statistic, some of the values are insignificant, but since most of them are significant, it is acceptable to have this model.
+Next, looking at $ARIMA(2, 1, 1) \times (2, 1, 1)_{12}$, the standardized residuals, ACF of residuals, Normal QQ plot of standardized residuals, and p-values for Ljung-Box statistic are shown in the Figure \ref{fig:fig7}. Looking at the standardized residuals, we do not see any trend in particular. Therefore, it looks like white noise. Next, looking at the ACF of residuals, we do not see any particular significance either. As for the QQ plot, the residual points seem to follow the normal distribution as they align very well with the straight line. As for the p-values for the Ljung-Box statistic, some of the values are insignificant, but some are significant. Hence we would prefer the previous model to this one. The model $ARIMA(2, 1, 0) \times (2, 1, 1)_{12}$ has the same results as they can be seen in the Figure \ref{fig:fig8}.\\
+Next, we will check the AIC and BIC values to make a more informed choice. The proposed models' AIC and BIC values are posted in Table \ref{table:2}. After looking at this table, we have concluded that the best model is $ARIMA(2, 1, 0) \times (0, 1, 3)_{12}$ since its AIC and BIC are the least as compared to all other models.
+
+```{r}
+#Forming a table with AICs and BICs of all proposed models
+df_table2 <- data.frame(model= c('SARIMA(2, 1, 1, 0, 1, 3, 12)', 
+                          'SARIMA(2, 1, 0, 0, 1, 1, 12)', 
+                          'SARIMA(2, 1, 0, 0, 1, 3, 12)', 
+                          'SARIMA(2, 1, 1, 2, 1, 1, 12)', 
+                          'SARIMA(2, 1, 0, 2, 1, 1, 12)'),
+                 AIC= c(model1$AIC, model2$AIC, model3$AIC, model4$AIC, model5$AIC),
+                 BIC= c(model1$BIC, model2$BIC, model3$BIC, model4$BIC, model5$BIC))
+df_table2
+```
+
+
+We choose this model:
+$ARIMA(2, 1, 0) \times (0, 1, 3)_{12}$
+
+
+```{r}
+#Printing the residuals of the final model
+final_model <- sarima(prodn, 2, 1, 0, 0, 1, 3, 12)
+final_model
+```
+If we look at the standardized residuals, we do not see any trend in particular.
+So we can say that it seems like white noise, which works in our favour. Next, 
+looking at the ACF of residuals, we do not see any particular significance 
+either. As for the QQ plot, the residual points seem to follow the normal 
+distribution since they align very well with the straight line. Finally, as for 
+the p-values for the Ljung-Box statistic, some of the values are insignificant,
+but since most of them are significant, it is acceptable to have this model.
+
+\subsection{Prediction}
+So, the final model is $ARIMA(2, 1, 0) \times (0, 1, 3)_{12}$. Next, we predict the next ten months of "prodn" data using the abovementioned model. The plot below in Figure \ref{fig:fig9} shows the prediction for the next ten months. As we can see from the plot shows an increasing trend with only one month that sees a decline. The predicted values and their 95\% intervals are shown below in Table \ref{table:3}.
+```{r}
+#The forecast for the next 10 months
+forecast_final <- sarima.for(prodn, 10, 2, 1, 1, 0, 1, 3, 12)
+```
+
+```{r}
+#Printing the 95% confidence interval
+
+# Get the 5% upper Prediction interval
+upper = forecast_final$pred+qnorm(0.975)*forecast_final$se
+# Get the 5% lower Prediction interval
+lower = forecast_final$pred-qnorm(0.975)*forecast_final$se
+# Construct a dataframe for the intervals
+forecast_ci <- data.frame("Prediction"=forecast_final$pred,"PI 95% Lower Bound"=lower,"PI 95% Upper Bound"=upper)
+forecast_ci
+```
+
+\subsection{Spectral analysis}
+After performing the spectral analysis, we identified the first three predominant periods with their 90\% confidence intervals for the specified periods, shown in the table below in Table \ref{table:4}. By looking at this table, we can say that we cannot establish the significance of the first, second, and third peaks since the periodogram ordinate of 240.9410 lies in the confidence intervals of the second and third peaks. The periodogram ordinate of 33.49 lies in the confidence interval of the first and third peaks. Lastly, the periodogram ordinate of 23.69 lies in the confidence interval of the first and second peaks. The plot for the periodogram is shown in Figure \ref{fig:fig10}.
+
+
+```{r}
+#Loading the necessary data
+data(prodn)
+
+#Performing spectral analysis
+prodn.per = mvspec(prodn, log = "no")
+prodn.per
+#Identifying the first three dominant frequencies
+P2<-prodn.per$details[order(prodn.per$details[,3],decreasing = TRUE),]
+P2[1,];P2[2,];P2[3,]
+```
+
+```{r}
+##90% CIs for the dominant frequencies for prodn series
+prodn.u1 = 2*P2[1,3]/qchisq(.050,2)
+prodn.l1 = 2*P2[1,3]/qchisq(.950,2)
+prodn.u2 = 2*P2[2,3]/qchisq(.050,2)
+prodn.l2 = 2*P2[2,3]/qchisq(.950,2)
+prodn.u3 = 2*P2[3,3]/qchisq(.050,2)
+prodn.l3 = 2*P2[3,3]/qchisq(.950,2)
+
+##Create a dataframe for the CIs
+Result <- data.frame(Series=c(rep("prodn",3)),
+Dominant.Freq=c(P2[1,1],P2[2,1],P2[3,1]), Spec=c(P2[1,3],P2[2,3],
+P2[3,3]),
+Lower=c(prodn.l1,prodn.l2,prodn.l3),
+Upper=c(prodn.u1,prodn.u2,prodn.u3))
+Result[1:2,3:5] = round(Result[1:2,3:5], 4)
+Result
+```
+
+\section{Discussion}
+The data provided for Monthly Federal Reserve Board Production Index data from 1948 to 1978 was not stationary. Stationary data is required; hence, the trend had to be removed from the given data to make it stationary. By doing so, we ended up with three models: $ARIMA(2, 1, 0) \times (0, 1, 3)_{12}$, $ARIMA(2, 1, 1) \times (2, 1, 1)_{12}$ and $ARIMA(2, 1, 0) \times (2, 1, 1)_{12}$. The model $ARIMA(2, 1, 0) \times (0, 1, 3)_{12}$ described our data the best, and it was used to predict the production index for the next ten months. Finally, spectral analysis was performed to find the most dominant frequencies, spectrums, and 95\% confidence intervals. This concludes that the production index would see an upward trend, decline briefly in July of 1979 and then grow again until October 1979.\\
+One of the limitations experienced in this report was the lack of fit by the use of the model $ARIMA(2, 1, 0) \times (0, 1, 3)_{12}$. Even though this model was chosen after model diagnostics, AIC and BIC comparisons, and testing the significance of parameters, the QQ plot showed a lack of fit. The data points towards the ends deviated a lot from the straight line. The other limitation experienced was that the significance of the first, second, and third peaks was not established. Hence, we could not get useful information from their spectrums.\\
+For future research purposes, a good way would be to consider transformations (such as log transformations) instead of just differencing.
